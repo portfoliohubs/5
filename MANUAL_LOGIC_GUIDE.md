@@ -101,3 +101,43 @@ Security notes:
 - CI/CD deploy action: `.github/workflows/deploy.yml`
 
 If you need, I can also add runtime telemetry hooks (opt-in) to collect failure events to your chosen analytics endpoint for easier debugging of real devices.
+
+## Appendix: Most Effective Method (Make CI deterministic)
+
+The single most effective action to ensure builds are reproducible and the GitHub Action runs reliably is to commit a `package-lock.json` generated from a developer machine. This makes `npm ci` deterministic and fast in CI.
+
+Steps to produce and commit a lockfile (recommended):
+1. On your local machine, run:
+
+```bash
+npm install
+```
+
+2. Verify the app builds locally:
+
+```bash
+npm run build
+```
+
+3. Commit the generated `package-lock.json` and push to `main`:
+
+```bash
+git add package-lock.json
+git commit -m "chore: add package-lock.json for reproducible CI builds"
+git push origin main
+```
+
+Why this is the best approach:
+- `npm ci` uses `package-lock.json` for exact dependency versions, producing reproducible builds and faster installs in CI.
+- It prevents accidental upgrades of transitive dependencies.
+
+Fallback made in current CI configuration:
+- The GitHub Action now checks for `package-lock.json` and runs `npm ci` when present, otherwise falls back to `npm install` with `--prefer-offline --no-audit`. This avoids the `EUSAGE` error but is less deterministic.
+- The Action also enables Node caching to speed repeated runs.
+
+CI Troubleshooting tips:
+- If the Action fails at the `Build` step with `Could not resolve entry module "index.html"`, ensure `src/index.html` exists and `src/vite.config.js` has `root` set to `src`. This repository's configuration sets `root: src`, `publicDir: ../public` and `build.outDir: ../dist` to match our structure.
+- If PWA asset warnings appear (unmatched includeAssets), ensure the files referenced in `vite.config.js`'s `includeAssets` exist in the `public/` folder (we currently include `icons/*` and `manifest.json`).
+- To speed up CI, commit `package-lock.json` and enable the `actions/cache` behavior already present in the workflow.
+
+If you want, I can prepare a suggested `package-lock.json` for this repo (based on `src/package.json`) as a patch you can review and commit — but I cannot run `npm install` in this environment to generate it automatically. The safest option is to run `npm install` locally and push the generated lockfile.
