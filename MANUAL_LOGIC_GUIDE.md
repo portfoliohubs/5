@@ -102,24 +102,25 @@ Security notes:
 
 If you need, I can also add runtime telemetry hooks (opt-in) to collect failure events to your chosen analytics endpoint for easier debugging of real devices.
 
-## Appendix: Most Effective Method (Make CI deterministic)
+## Appendix: Production Deployment & GitHub Pages Setup (Recommended Method)
 
-The single most effective action to ensure builds are reproducible and the GitHub Action runs reliably is to commit a `package-lock.json` generated from a developer machine. This makes `npm ci` deterministic and fast in CI.
+This section provides the complete, production-ready setup to deploy DentalFolio to GitHub Pages with a robust, deterministic CI/CD pipeline.
 
-Steps to produce and commit a lockfile (recommended):
-1. On your local machine, run:
+### Local Setup (One-Time)
+
+**Step 1: Generate `package-lock.json` for deterministic builds**
+
+Run on your developer machine:
 
 ```bash
+cd "path/to/portfolio PWA VS"
 npm install
-```
-
-2. Verify the app builds locally:
-
-```bash
 npm run build
 ```
 
-3. Commit the generated `package-lock.json` and push to `main`:
+This generates `package-lock.json` and verifies the build succeeds locally. Expected output: `dist/` folder containing built assets, `dist/sw.js` (service worker), and workbox files.
+
+**Step 2: Commit and push the lockfile**
 
 ```bash
 git add package-lock.json
@@ -127,17 +128,94 @@ git commit -m "chore: add package-lock.json for reproducible CI builds"
 git push origin main
 ```
 
-Why this is the best approach:
-- `npm ci` uses `package-lock.json` for exact dependency versions, producing reproducible builds and faster installs in CI.
-- It prevents accidental upgrades of transitive dependencies.
+**Why this is the best approach:**
+- `npm ci` (CI clean install) uses exact versions from `package-lock.json`, ensuring reproducible builds across machines and CI runners.
+- Prevents accidental upgrades of transitive dependencies.
+- Speeds up CI installs due to npm caching (locks are cached more efficiently than open ranges).
 
-Fallback made in current CI configuration:
-- The GitHub Action now checks for `package-lock.json` and runs `npm ci` when present, otherwise falls back to `npm install` with `--prefer-offline --no-audit`. This avoids the `EUSAGE` error but is less deterministic.
-- The Action also enables Node caching to speed repeated runs.
+### GitHub Actions Workflow (Already Configured)
 
-CI Troubleshooting tips:
-- If the Action fails at the `Build` step with `Could not resolve entry module "index.html"`, ensure `src/index.html` exists and `src/vite.config.js` has `root` set to `src`. This repository's configuration sets `root: src`, `publicDir: ../public` and `build.outDir: ../dist` to match our structure.
-- If PWA asset warnings appear (unmatched includeAssets), ensure the files referenced in `vite.config.js`'s `includeAssets` exist in the `public/` folder (we currently include `icons/*` and `manifest.json`).
-- To speed up CI, commit `package-lock.json` and enable the `actions/cache` behavior already present in the workflow.
+The repository includes `.github/workflows/deploy.yml` with the following optimizations:
 
-If you want, I can prepare a suggested `package-lock.json` for this repo (based on `src/package.json`) as a patch you can review and commit — but I cannot run `npm install` in this environment to generate it automatically. The safest option is to run `npm install` locally and push the generated lockfile.
+- **Node caching**: Uses `actions/cache@v4` with keys based on `package-lock.json` and `package.json` hashes. Cache hits skip reinstalls entirely.
+- **Robust install**: Checks for `package-lock.json` and runs `npm ci` when present (fast), otherwise falls back to `npm install` (safe fallback).
+- **Vite configuration**: Set to `root: src`, `publicDir: ../public`, `build.outDir: ../dist` to locate files in non-standard structure.
+- **PWA assets**: `includeAssets: ['icons/*', 'manifest.json']` only references files that exist in `public/` folder.
+- **Auto-deploy**: On push to `main`, builds `dist/` and publishes to `gh-pages` branch (GitHub Pages serves this automatically).
+
+### GitHub Pages Configuration
+
+To deploy to GitHub Pages, perform a one-time setup:
+
+1. Go to your repository **Settings** → **Pages**.
+2. Under "Source", select **Deploy from a branch**.
+3. Select branch: `gh-pages`, folder: `/ (root)`, and click **Save**.
+4. Within ~1 minute, your app is live at `https://<username>.github.io/<repo-name>/` (or custom domain if configured).
+
+### Complete Deployment Checklist
+
+Before your first push to `main` after following "Local Setup" above:
+
+- [ ] Run `npm install` locally → `package-lock.json` generated
+- [ ] Run `npm run build` locally → `dist/` created successfully
+- [ ] Commit `package-lock.json` to git
+- [ ] Push to `main` branch
+- [ ] GitHub Action triggers automatically
+- [ ] Check **Actions** tab to verify build completes without errors
+- [ ] Once build succeeds, check **Settings** → **Pages** to confirm deployment URL
+- [ ] Visit the deployment URL to verify app is live
+
+### CI Troubleshooting
+
+**"Dependencies lock file is not found" error**
+- Cause: GitHub Actions `setup-node` cache input requires `package-lock.json`. Fixed by removing that input and using explicit `actions/cache` step (already done in current workflow).
+- Resolution: Run `npm install` locally, commit `package-lock.json`, and push to `main`.
+
+**"Could not resolve entry module index.html" build error**
+- Cause: Vite `root` configuration pointing to wrong directory.
+- Resolution: Verify `src/vite.config.js` has:
+  ```javascript
+  root: path.resolve(__dirname),  // src/
+  publicDir: path.resolve(REPO_ROOT, 'public'),
+  build: { outDir: path.resolve(REPO_ROOT, 'dist'), emptyOutDir: true }
+  ```
+  This is already configured correctly in this repository.
+
+**PWA "glob patterns don't match any files" warning**
+- Cause: `includeAssets` references files that don't exist in `public/` folder.
+- Resolution: Ensure referenced files exist, or remove missing entries from `vite.config.js`. Current config includes `icons/*` and `manifest.json` which should exist.
+
+**Asset 404 errors on GitHub Pages (CSS/JS loading fails)**
+- Cause: `base` not set to relative path for GitHub Pages.
+- Resolution: Verify `src/vite.config.js` has `base: './'` to ensure assets load from repo-relative paths. Already configured correctly.
+
+### Hot-Fix & Version Updates
+
+If you need to push a bug fix or feature update:
+
+1. Make code changes locally.
+2. Test with `npm run dev` and `npm run build`.
+3. Commit and push to `main`.
+4. GitHub Action auto-builds and deploys to `gh-pages` within ~2 minutes.
+5. Users' browsers fetch the new service worker automatically (due to `registerType: 'autoUpdate'` in PWA config).
+
+For faster user adoption of critical fixes, add a version check on app load and prompt users to refresh (see "PWA Caching & Hot-Fix Updates Strategy" section above).
+
+### Local Development Commands Reference
+
+```bash
+npm install           # Install dependencies (generates lockfile)
+npm run dev          # Start dev server (Vite, hot reload, localhost:5173)
+npm run build        # Build production assets to dist/
+npm run preview      # Preview production build locally
+npm run deploy       # Deploy dist/ to gh-pages branch (if you prefer local deploy)
+```
+
+### File Locations & CI Dependencies
+
+- **Build config**: `src/vite.config.js`
+- **Source root**: `src/` (with `index.html` entry point)
+- **Public assets**: `public/` (icons, manifest.json)
+- **Build output**: `dist/` (generated by `npm run build`)
+- **Workflow**: `.github/workflows/deploy.yml`
+- **Lockfile (after `npm install`)**: `package-lock.json` at repo root
