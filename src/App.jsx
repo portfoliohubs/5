@@ -5,15 +5,16 @@ import CaseManager from './components/CaseManager'
 import KeyValidator from './components/KeyValidator'
 import { generateDentalPDF, parseDentalMetadata } from './utils/pdfGenerator'
 
-export default function App() {
-  const [doctor, setDoctor] = useState({
-    name: '',
-    email: '',
-    university: '',
-    socials: { whatsapp: '', facebook: '', instagram: '', linkedin: '' },
-    profileImage: null,
-  })
+const DEFAULT_DOCTOR = {
+  name: '',
+  email: '',
+  university: '',
+  socials: { whatsapp: '', facebook: '', instagram: '', linkedin: '' },
+  profileImage: null,
+}
 
+export default function App() {
+  const [doctor, setDoctor] = useState(DEFAULT_DOCTOR)
   const [cases, setCases] = useState([])
   const [maxCases, setMaxCases] = useState(20)
   const [usedCases, setUsedCases] = useState(0)
@@ -22,14 +23,13 @@ export default function App() {
   const [appendMode, setAppendMode] = useState(false)
   const [hydrated, setHydrated] = useState(false)
 
-  // Read persisted state once on start, guard rendering until hydration
   useEffect(() => {
     try {
       const saved = localStorage.getItem('dentalfolio:state')
       if (saved) {
         const parsed = JSON.parse(saved)
-        setDoctor(parsed.doctor || {})
-        setCases(parsed.cases || [])
+        setDoctor(parsed.doctor || DEFAULT_DOCTOR)
+        setCases([]) // File objects are not serialisable — start fresh
         setMaxCases(parsed.maxCases ?? 20)
         setUsedCases(parsed.usedCases ?? 0)
         setActivationKey(parsed.activationKey || '')
@@ -43,25 +43,24 @@ export default function App() {
     }
   }, [])
 
-  // debounce localStorage writes to avoid excessive IO
   useEffect(() => {
     if (!hydrated) return
-    const toSave = { doctor, cases, maxCases, usedCases, activationKey, unlocked, appendMode }
+    const toSave = { doctor, maxCases, usedCases, activationKey, unlocked, appendMode }
     const id = setTimeout(() => {
-      try { localStorage.setItem('dentalfolio:state', JSON.stringify(toSave)) } catch (e) { console.debug('localStorage write failed', e) }
+      try { localStorage.setItem('dentalfolio:state', JSON.stringify(toSave)) }
+      catch (e) { console.debug('localStorage write failed', e) }
     }, 400)
     return () => clearTimeout(id)
-  }, [doctor, cases, maxCases, usedCases, activationKey, unlocked, appendMode, hydrated])
+  }, [doctor, maxCases, usedCases, activationKey, unlocked, appendMode, hydrated])
 
   async function handleGeneratePDF() {
     if (!unlocked) return alert('Please enter a valid Activation Key to unlock downloads.')
     try {
       const blob = await generateDentalPDF({ doctor, cases, maxCases, usedCases, activationKey })
       const url = URL.createObjectURL(blob)
-      // iOS detection: show tooltip instruction
       const isIOS = /iP(ad|hone|od)/.test(navigator.userAgent) && !window.MSStream
       if (isIOS) {
-        alert("iOS open files in a new tab. Tap the 'Share' icon and select 'Save to Files' to download your portfolio.")
+        alert("On iOS, the file opens in a new tab. Tap the Share icon and select 'Save to Files' to download.")
       }
       const a = document.createElement('a')
       a.href = url
@@ -94,7 +93,7 @@ export default function App() {
     }
     if (meta) {
       setAppendMode(true)
-      setDoctor((d) => ({ ...d, name: meta.doctorName }))
+      setDoctor(d => ({ ...d, name: meta.doctorName }))
       setMaxCases(meta.maxCases)
       setUsedCases(meta.usedCases)
     } else {
@@ -105,13 +104,18 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
-      <main className="max-w-5xl mx-auto p-6">
+      <main className="max-w-5xl mx-auto p-4 sm:p-6">
         {!hydrated ? (
           <div className="text-center py-20 text-slate-500">Restoring your session...</div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             <div className="col-span-1 space-y-4">
-              <DoctorForm doctor={doctor} setDoctor={setDoctor} appendMode={appendMode} onImportPDF={handleImportPDF} />
+              <DoctorForm
+                doctor={doctor}
+                setDoctor={setDoctor}
+                appendMode={appendMode}
+                onImportPDF={handleImportPDF}
+              />
               <KeyValidator
                 doctor={doctor}
                 activationKey={activationKey}
@@ -122,29 +126,24 @@ export default function App() {
                 usedCases={usedCases}
                 setMaxCases={setMaxCases}
               />
-              <div>
-                <button
-                  onClick={() => {
-                    const whatsappMessage = `Hello, I want to activate my package for Email: ${doctor.email || ''}`
-                    const url = `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`
-                    window.open(url, '_blank')
-                  }}
-                  className="w-full py-3 px-4 rounded-lg bg-emerald-500 text-white font-semibold"
-                >
-                  Contact via WhatsApp to Purchase
-                </button>
-              </div>
-              <div>
-                <button
-                  disabled={!unlocked}
-                  onClick={handleGeneratePDF}
-                  className="w-full py-3 px-4 rounded-lg text-white font-semibold pdf-btn disabled:opacity-50"
-                >
-                  Download Portfolio (PDF)
-                </button>
-              </div>
+              <button
+                onClick={() => {
+                  const msg = `Hello, I want to activate my package for Email: ${doctor.email || ''}`
+                  window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank')
+                }}
+                className="w-full py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold transition-colors"
+              >
+                Contact via WhatsApp to Purchase
+              </button>
+              <button
+                disabled={!unlocked}
+                onClick={handleGeneratePDF}
+                className="w-full py-3 px-4 rounded-xl text-white font-semibold disabled:opacity-40 disabled:cursor-not-allowed pdf-btn"
+              >
+                {unlocked ? 'Download Portfolio (PDF)' : 'Locked — Activate to Download'}
+              </button>
             </div>
-            <div className="col-span-2">
+            <div className="col-span-1 lg:col-span-2">
               <CaseManager
                 cases={cases}
                 setCases={setCases}

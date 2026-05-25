@@ -2,6 +2,7 @@
   "name": "dentalfolio",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "homepage": "./",
   "scripts": {
     "dev": "vite --config src/vite.config.js",

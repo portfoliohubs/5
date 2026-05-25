@@ -14,7 +14,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Cache NPM
         uses: actions/cache@v4
@@ -24,9 +24,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
 
-      - name: Install dependencies (robust)
+      - name: Install dependencies
         run: |
-          # Prefer clean install when lockfile exists, otherwise fall back to npm install
           if [ -f package-lock.json ]; then
             npm ci --prefer-offline --no-audit
           else

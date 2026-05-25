@@ -2,8 +2,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
+import { fileURLToPath } from 'url'
 
-// Vite config lives in `src/` per project structure. Set root and publicDir
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SRC_DIR = path.resolve(__dirname)
 const REPO_ROOT = path.resolve(SRC_DIR, '..')
 
@@ -19,7 +20,6 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      // include only assets that exist in the public folder to avoid warnings
       includeAssets: ['icons/*', 'manifest.json'],
       manifest: {
         name: 'DentalFolio',

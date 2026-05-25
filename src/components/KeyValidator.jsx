@@ -5,7 +5,9 @@ const SECRET_SALT = 's3cr3t_DentalFolio_SALT_2026'
 async function hmacHex(message, salt) {
   const enc = new TextEncoder()
   const keyData = enc.encode(salt)
-  const cryptoKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  )
   const sig = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(message))
   return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
@@ -17,9 +19,13 @@ function constantTimeEqual(a, b) {
   return res === 0
 }
 
-export default function KeyValidator({ doctor, activationKey, setActivationKey, unlocked, setUnlocked, maxCases, usedCases, setMaxCases }) {
+const tierMap = { Basic: 5, Pro: 20, Premium: 50 }
+
+export default function KeyValidator({
+  doctor, activationKey, setActivationKey,
+  unlocked, setUnlocked, maxCases, usedCases, setMaxCases
+}) {
   const [tier, setTier] = useState('Pro')
-  const tierMap = { Basic: 5, Pro: 20, Premium: 50 }
 
   async function validateKey() {
     if (!doctor.email) return alert('Enter your email first')
@@ -31,8 +37,7 @@ export default function KeyValidator({ doctor, activationKey, setActivationKey, 
         setUnlocked(false)
         return alert('Invalid Activation Key format')
       }
-      const ok = constantTimeEqual(provided, expected)
-      if (ok) {
+      if (constantTimeEqual(provided, expected)) {
         setUnlocked(true)
         setMaxCases(tierLimit)
         alert('Activation successful — downloads unlocked')
@@ -47,29 +52,52 @@ export default function KeyValidator({ doctor, activationKey, setActivationKey, 
   }
 
   return (
-    <section className="bg-white rounded-lg p-4 shadow-sm">
-      <h3 className="font-semibold mb-2">Activation</h3>
-      <div className="mb-2">
-        <label className="block text-sm">Tier</label>
-        <select value={tier} onChange={(e) => setTier(e.target.value)} className="w-full p-2 border rounded">
-          <option>Basic</option>
-          <option>Pro</option>
-          <option>Premium</option>
-        </select>
+    <section className="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+      <h3 className="font-semibold mb-3 text-slate-900">Activation</h3>
+
+      <label className="block text-sm font-medium text-slate-700 mb-1">Tier</label>
+      <select
+        value={tier}
+        onChange={(e) => setTier(e.target.value)}
+        className="w-full p-2 border border-slate-300 rounded-lg mb-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <option>Basic</option>
+        <option>Pro</option>
+        <option>Premium</option>
+      </select>
+
+      <label className="block text-sm font-medium text-slate-700 mb-1">Activation Key</label>
+      <input
+        className="w-full p-2 border border-slate-300 rounded-lg mb-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+        value={activationKey}
+        onChange={(e) => setActivationKey(e.target.value)}
+        placeholder="Enter activation key (64-char hex)"
+      />
+
+      <div className="flex gap-2 mb-3">
+        <button
+          onClick={validateKey}
+          className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+        >
+          Validate Key
+        </button>
+        <button
+          onClick={() => {
+            const msg = `Hello, I want to activate my ${tier} package for Email: ${doctor.email || ''}`
+            window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank')
+          }}
+          className="flex-1 px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-medium transition-colors"
+        >
+          Buy via WhatsApp
+        </button>
       </div>
-      <div className="mb-2">
-        <label className="block text-sm">Activation Key</label>
-        <input className="w-full p-2 border rounded" value={activationKey} onChange={(e) => setActivationKey(e.target.value)} placeholder="Enter activation key (hex)" />
+
+      <div className={`flex items-center gap-2 text-sm ${unlocked ? 'text-emerald-600' : 'text-slate-500'}`}>
+        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${unlocked ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
+        {unlocked
+          ? `Unlocked — ${maxCases} cases max (${usedCases} used)`
+          : 'Locked — enter activation key to unlock'}
       </div>
-      <div className="flex gap-2">
-        <button onClick={validateKey} className="px-3 py-2 bg-blue-600 text-white rounded">Validate Key</button>
-        <button onClick={() => {
-          const whatsappMessage = `Hello, I want to activate my ${tier} package for Email: ${doctor.email || ''}`
-          const url = `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`
-          window.open(url, '_blank')
-        }} className="px-3 py-2 bg-emerald-500 text-white rounded">Unlock via WhatsApp</button>
-      </div>
-      <p className="text-sm text-slate-500 mt-2">Download is {unlocked ? 'unlocked' : 'locked'} — used: {usedCases}</p>
     </section>
   )
 }
